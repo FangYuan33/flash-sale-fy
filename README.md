@@ -1,36 +1,57 @@
-# 方圆整理的高并发秒杀系统
+## 1. 希望能有用
+大家好，我是`方圆`。之前在部门业务中开发过类似秒杀的功能，但是因为QPS并不是很高，所以使用到的技术栈和指定的业务方案比较简单。
 
-## 1. 介绍
-高并发秒杀系统实战项目，记录每一分成长
+所以我对此并不满意，再加上之前校招的时候跟着视频写过一个秒杀系统，回头看它觉得它实在是太low了，借着这些引子，想把那些网上听过的不错解决方案实现。
 
-## 2. 软件架构
+为了方便大家参考和仿写，或者是从0到1的开发，我打算`创建不同的分支来保存具体的改动`，它也像是这个秒杀系统不断演进一样，能够面对更大规模的并发量。
 
-- flash-sale-domain: 领域层，包含实体类
-- flash-sale-infrastructure: 基础设施层，包含mapper文件
-- flash-sale-app: 应用层，包含service服务
-- flash-sale-controller: controller层
-- environment-mysql: 保存数据库脚本
-- environment-postman: postman测试脚本
+## 2. 分支介绍
+目前该项目做到的优化包括缓存、限流和异步削峰。
 
-## 3. 分支说明
+- **master**：主分支将集成秒杀系统所有的功能，它是秒杀系统的完全体
+- **base-framework**：这个分支只是搭了一个架子，添加了一些通用的实体类，保留它的目的是方便大家从0到1的去实现这个秒杀项目，只不过`需要大家根据自己的环境更改一下配置`
+- **base-function**：这个分支保留的是这个系统的最基础的针对秒杀活动、秒杀商品、订单的CRUD功能，未进行任何针对高并发的优化，大家也可以从这个分支开始，但是`这个项目采用的是DDD架构`，推荐考虑也把这个分支的代码写一写，更好的理解DDD
+- **increase_local_cache**：这个分支是缓存设计的开始，对应`本地缓存`，是在base_function分支上进行开发的
+- **increase_distributed_cache**：在本地缓存的基础上引入`分布式缓存`，它是在increase_local_cache分支基础上进行开发的
+- **increase_refresh_cache**：该分支对应秒杀活动、商品在执行发布、上线和下线操作时对缓存的更新的代码
+- **increase_stock_cache**：对应商品库存在缓存中的初始化、扣减和增加相关的代码
+- **increase_sentinel**：在缓存的基础上，添加限流，并使用Nacos进行配置
+- **increae_mq**：借助MQ异步实现削峰
 
-### 3.1 base-framework
-- 想在这个分支搭建一个基础框架，什么项目代码都没有，能从这个分支上从0到1的开发
+## 3. 项目介绍
+### 3.1 DDD架构
+> 各个层次的依赖关系如下
 
-### 3.2 base-function
-> 基础功能开发，包括秒杀活动的操作和秒杀品操作
+![在这里插入图片描述](https://img-blog.csdnimg.cn/b1131e1138624851b90709a6dc4fd9c2.png)
 
-#### 3.2.1 开发日志
+1. **flash-sale-app** 应用层，主要放的是service实现
+2. **flash-sale-controller** controller层，处理API请求和业务异常的处理
+3. **flash-sale-domain** 领域层，在我们的系统中，它不依赖任何层级，是`最干脆和整洁`的一层
+4. **flash-sale-infrastructure** 基础设施层，为上面各层提供通用的技术能力，包括`消息处理`、`持久化机制`、`缓存处理`等
+5. **flash-fale-start** 启动服务，Application和配置都在这一层
 
-- 22/02/20 新增 秒杀活动发布功能
+
+### 3.2 使用的组件
+- mybatis-plus：为了避免手写简单SQL，集成进来再方便不过
+- swagger3.0：懒得用postman，方便的页面API调用，访问`http://localhost:8090/api/swagger-ui/`即可使用，也能在项目启动的时候发现它
+- Redis：分布式缓存使用的Redis，也是必须会的中间件
+- Kafka：异步削峰借助Kafka实现
+- Sentinel：限流
+- Nacos：限流配置文件和yaml配置文件，实现配置文件中内容的及时更新以控制定时任务的执行
 
 
-## 巨人的肩膀
-- [Nacos启动报错解决：which: no javac in ](https://blog.csdn.net/qq_44895681/article/details/105515025)
-- [centos7下 Nacos安装 以及可能会出现的问题启动成功无法访问](https://blog.csdn.net/dagedeshu/article/details/109209157)
-- [Error creating bean with name 'flow-sentinel-nacos-datasource'](https://www.yuque.com/yuqueyonghu4gseak/yc/gyft35)
-- [Sentinel 官方文档](https://github.com/alibaba/spring-cloud-alibaba/wiki/Sentinel)
-- [Nacos 官方文档](https://nacos.io/zh-cn/docs/quick-start-spring-cloud.html)
-- [NacosConfig 摆脱本地配置参考文档](https://github.com/alibaba/spring-cloud-alibaba/wiki/Nacos-config)
-- [Nacos Spring-Cloud @RefreshScope 配置不生效问题](https://blog.csdn.net/fly_leopard/article/details/107489937)
-- [Nacos 配置实时更新原理分析](https://www.jianshu.com/p/acb9b1093a54)
+## 4. 结语
+这篇文章起稿于`2月24日`，完稿于`4月中旬`，由于工作在身，开发全都是在休息时间。但是写到分库分表解决更大型秒杀场景的时候，觉得心有余而力不足，看了一些别人的秒杀解决方案之后，发现自己忽略掉了很多细节，还有很大的优化空间：缓存的去中心化、保证Redis的高可用性、布隆过滤器、Niginx负载均衡、分布式事务等等，我目前做的这些相比于高大上的解决方案就像是洒了洒水...
+
+但是这个项目也有值得参考的地方，因为它是我一步步自己写出来的，保证每一步都能实现，另外它还有详细的注释和我开发过程中的体会。还有它体现的是我的代码习惯，受《代码整洁之道》影响，我有信心它会对大家有一些参考价值。以它现在的阶段，其实我觉得并不适合写在简历上，虽然比我当时校招时的秒杀项目要完善，但是当我发现有很多很多优秀解决方案的项目时，还是觉得这个项目更像是一个玩具...
+
+如果未来再有机会，再写吧...
+
+## 5. 巨人的肩膀
+
+- 《高并发秒杀的设计精要与实现》，代码可读性比较差，有些乱
+- 《图解 Kafka 之实战指南》
+- [GitHub：如何设计一个秒杀系统](https://github.com/yunfeiyanggzq/miaosha)
+- 《Java秒杀系统方案优化 高性能高并发实战》，别去看这个慕课网的课了，很low
+- 《代码整洁之道》
+- 《京东秒杀架构升级优化实践》
